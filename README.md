@@ -16,22 +16,18 @@ This is the main one.  Start here.  It sources in other scripts and runs nrep si
 	<b>Change those before running anything!</b>
 	
 <i>colrate.R</i>
-	10 different options for colonization rate, all are calculated in holoSim-Ash.R
+
+10 different options for colonization rate, all are calculated in holoSim-Ash.R
 
 <i>empty_or_sampled.R</i>
-has vectors for
-	empty cells (Atlantic ocean, outside of Fraxinus range, etc.)
-	grid cell IDs for sampled populations
-	sample sizes for each sampled population
+
+has vectors for empty cells (Atlantic ocean, outside of Fraxinus range, etc.), grid cell IDs for sampled populations, sample sizes for each sampled population
 		
 <i>holoStats.R</i>
+
 function to calculate stats from the simulation output -- strataG object should work with observed Fraxinus data too
-Calculates
-	segregating sites per pop
-	private segregating sites per pop & total
-	observed heterozygosity per pop & total
-	pairwise Fst
-	total Fst
+Calculates: segregating sites per pop, private segregating sites per pop & total, observed heterozygosity per pop & total, pairwise Fst, total Fst
+
 Also contains a function to mask simulated data to match the pattern of missing data for Fraxinus.  This depends on a ‘data mask’ .csv file that has TRUE/FALSE where the observed data is missing/present, respectively.
 			
 <i>runFSC.R</i>
