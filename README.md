@@ -1,7 +1,7 @@
 # holoSim
-R scripts for coupling spatially explicit forward simulations with coalescent simulations
+R scripts and data for running coupled (spatially explicit) forward and coalescent simulations 
 
-#Contents
+#R scripts
 <i>holoSim-Ash.R</i>
 
 	This is the main one.  Start here.  It sources in other scripts and runs nrep simulations.  
@@ -53,3 +53,21 @@ R scripts for coupling spatially explicit forward simulations with coalescent si
 	the original from Allan's work.  Not changed, included so you can check out colonization history, if interested.
 	Note, it doesn't like NA's in the pops object
 		Use: plothist(pops[is.na(pops$arrive) == FALSE,]) 
+		
+#Data Files
+
+<i>data_mask.csv</i>
+
+	Matrix of TRUE/FALSE for genotypes from 753 Ash trees.  TRUE = missing data in a cell
+	
+<i>Fraxinus_data.Rda</i>
+
+	R data file with genotypes for 753 Ash trees.  
+	
+#Dependencies and Requirements
+
+Requires the following R libraries:
+	rmetasim (github version from stranda/rmetasim), strataG, hierfstat, and parallel
+	
+Requires fastsimcoal (http://cmpg.unibe.ch/software/fastsimcoal/) install in the $PATH
+
