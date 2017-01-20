@@ -12,7 +12,7 @@ holoSim-Ash.R
 	The script writes files line by line, so 'wc -l Ash_1.out' will give you an idea of how many successful runs you've done (header row gets counted too, so subtract one for the # of replicates)
 	This script also saves an R data object for each replicate (Ash_<node>-<replicate>.Rda) that contains the gtypes object for the simulation (genotypes, strataG format) and the parameters used in the replicate
 	‘Rsource’ and ‘SIMS’ objects point to folders where the scripts are and where you want the simulation files to be written, respectively.  
-		#Change those before running anything!
+	#Change those before running anything!
 	
 colrate.R
 	10 different options for colonization rate, all are calculated in holoSim-Ash.R
