@@ -4,7 +4,7 @@ R scripts for coupling spatially explicit forward simulations with coalescent si
 #Contents
 <i>holoSim-Ash.R</i>
 
-This is the main one.  Start here.  It sources in other scripts and runs nrep simulations.  
+	This is the main one.  Start here.  It sources in other scripts and runs nrep simulations.  
 	This script can be run from the command line with, for instance...
 		'Rscript holoSim-Ash.R 1 100'
 	in this case, the output would be Ash_1.out and the script would attempt to run 100 replicates
@@ -13,22 +13,22 @@ This is the main one.  Start here.  It sources in other scripts and runs nrep si
 	The script writes files line by line, so 'wc -l Ash_1.out' will give you an idea of how many successful runs you've done (header row gets counted too, so subtract one for the # of replicates)
 	This script also saves an R data object for each replicate (Ash_<node>-<replicate>.Rda) that contains the gtypes object for the simulation (genotypes, strataG format) and the parameters used in the replicate
 	‘Rsource’ and ‘SIMS’ objects point to folders where the scripts are and where you want the simulation files to be written, respectively.  
-	<b>Change those before running anything!</b>
+	Change those before running anything!!!!
 	
 <i>colrate.R</i>
 
-10 different options for colonization rate, all are calculated in holoSim-Ash.R
+	10 different options for colonization rate, all are calculated in holoSim-Ash.R
 
 <i>empty_or_sampled.R</i>
 
-has vectors for empty cells (Atlantic ocean, outside of Fraxinus range, etc.), grid cell IDs for sampled populations, sample sizes for each sampled population
+	has vectors for empty cells (Atlantic ocean, outside of Fraxinus range, etc.), grid cell IDs for sampled populations, sample sizes for each sampled population
 		
 <i>holoStats.R</i>
 
-function to calculate stats from the simulation output -- strataG object should work with observed Fraxinus data too
-Calculates: segregating sites per pop, private segregating sites per pop & total, observed heterozygosity per pop & total, pairwise Fst, total Fst
+	function to calculate stats from the simulation output -- strataG object should work with observed Fraxinus data too
+	Calculates: segregating sites per pop, private segregating sites per pop & total, observed heterozygosity per pop & total, pairwise Fst, total Fst
 
-Also contains a function to mask simulated data to match the pattern of missing data for Fraxinus.  This depends on a ‘data mask’ .csv file that has TRUE/FALSE where the observed data is missing/present, respectively.
+	Also contains a function to mask simulated data to match the pattern of missing data for Fraxinus.  This depends on a ‘data mask’ .csv file that has TRUE/FALSE where the observed data is missing/present, respectively.
 			
 <i>runFSC.R</i>
 
