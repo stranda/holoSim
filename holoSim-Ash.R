@@ -15,8 +15,10 @@ nrep = as.numeric(args[2])   #This is the number of replicates run
 #nrep = 10
 #Rsource = "~/Google Drive/MSU/HOLOSIM/Software/SimTemplate/github/"
 #SIMS="~/Desktop/AshSims"
-Rsource = "/mnt/research/ABC/holoSim/Rsource/"
-SIMS = "/mnt/research/ABC/holoSim/Ash/"
+Rsource = "~/GoogleDrive/src/holoSim/"
+SIMS="~/tmp/AshSims"
+#Rsource = "/mnt/research/ABC/holoSim/Rsource/"
+#SIMS = "/mnt/research/ABC/holoSim/Ash/"
 
 setwd(Rsource)
 source("colrate.R") #Fxns to calculate colonization rate measures
@@ -27,6 +29,9 @@ source("holoStats.R") #Functions to calculate stats from simulations, mask data,
 source("make-landscape2.R") #changed so pops grow, fecundity increased (1.05 -> 1.2), also changed popcoords fxn to fix numbering
 source("getpophist3.R") #changed to track population abundance at beginning and end of window specified for getC4(), also new logical test!
 source("plothist.R")  #Unchanged
+source("segment-regression.R")
+
+
 dm = read.csv("data_mask.csv", header = TRUE)
 
 setwd(SIMS)
@@ -52,6 +57,8 @@ seq.length = 80  #Length of individual RAD contigs -- scales mutation rate for f
 #Won't total fecundity per generation (=per time click) be important for the pace of range expansion??
 local_N = 20  #These aren't drawn as parameters -- coal_Ne will be though
 ref_N = 20    #Not a parameter?
+
+simout = vector("list",nrep)
 
 repl = 1
 while(repl <= nrep) {
@@ -139,9 +146,16 @@ while(repl <= nrep) {
 #Allows 5 tries with fastsimcoal
 	#If the right number of SNPs come out of the simulation, write a line, otherwise replicate is skipped
 		if(SNPloci == nSNP) {
-			save(parms, out2, file = paste0("Ash_", node,"-",repl,".Rda"))
-	
-			stats = holoStats(out2, popDF)
+			
+                    print("about to run holostats")
+			stats = holoStats(out2, popDF, extent=c(ydim,xdim))
+                    print("done running holostats")
+                    
+###risky to wait till end of loop to save, but makes for really convenient data structure
+###I propose not running too many reps per node, but using lots of nodes?
+###still saving the original way for stats output.
+###                     save(parms, out2, file = paste0("Ash_", node,"-",repl,".Rda"))
+                    simout[[repl]] <- list(out=out2, parms=parms, popDF=popDF, stats=stats)
 
 			done = format(Sys.time(), "%H:%M:%S")   #Better time?  t2-t1 would need a tweak to always measure on the same scale
 			#Print all parms and stats to a file
@@ -157,3 +171,6 @@ while(repl <= nrep) {
 		}
 	}
 }
+
+save(file=paste0("Ash_",node,"_",gsub(" ","",date()),".rda"),simout)
+

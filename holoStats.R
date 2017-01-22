@@ -1,9 +1,10 @@
 #holoStats.R 
 #Script to define a function to calculate stats for holoSim ABC simulations
 
-holoStats = function(out, popDF) {
+holoStats = function(out, popDF, extent) {
 	require(hierfstat)
-	
+
+        
 	popid = strataNames(out)
 	SNPs = as.numeric(table(summarizeLoci(out)[,3]))
 	names(SNPs) = "tot_SNPs"
@@ -25,6 +26,7 @@ holoStats = function(out, popDF) {
 	total_Ho = mean(obsvdHet(out))
 	names(total_Ho) = "tot_Ho"
 
+
 	privateSNP = colSums(privateAlleles(out))
 	#privateSNP = privateSNP[sample.order]
 	names(privateSNP) = paste0("pS.", popid)
@@ -36,7 +38,6 @@ holoStats = function(out, popDF) {
 	FstMat = pairwise.fst(genind_out, pop = genind_out$pop)
 	pairFst = as.vector(FstMat)
 	Fstnames = c()
-	
 	#This will be different...
 	for(pid in 1:(length(popDF$id)-1)) {
 		Fstnames = c(Fstnames, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
@@ -45,8 +46,68 @@ holoStats = function(out, popDF) {
 	
 	tot_Fst = as.numeric(statFst(out)$result[1])
 	names(tot_Fst) = "tot_Fst"
-	
-	stats = c(SNPs, localSNP, localHo, total_Ho, privateSNP, total_priv, pairFst, tot_Fst)
+
+########### some spatially focused stats
+###     get pop coords:
+        pops=t(matrix(1:prod(extent),ncol=extent[1]))
+        popcrd=data.frame(t(sapply(popDF$grid.cell,function(i) {which(pops==i,arr.ind=T)})))
+        names(popcrd)=c("y","x")
+        popDF=cbind(popDF,popcrd)
+        
+###     get pairwise distances
+        pdist=as.matrix(dist(popDF[,c("x","y")]))
+        colnames(pdist) <- popDF$id
+        rownames(pdist) <- colnames(pdist)
+        diag(pdist) <- NA
+        pdist[upper.tri(pdist)] <- NA
+        dsts = as.data.frame(as.table(pdist))
+        dsts = dsts[complete.cases(dsts),]
+        names(dsts) <- c("to","from","d")
+        dsts$from <- as.character(dsts$from)
+        dsts$to <- as.character(dsts$to)
+        dsts <- dsts[order(dsts$to,dsts$from),]
+
+print("this far")
+        
+        sum_stats_gi<-summary(genind_out)
+        numAll=sum_stats_gi$pop.n.all
+        numAll=data.frame(id=names(numAll),na=numAll,stringsAsFactors=F)
+
+        he_by_pop<-as.vector(as.numeric(lapply(lapply(seppop(genind_out),summary),
+                                               function(x) mean(x$Hexp))))
+
+        hedf <- data.frame(he=he_by_pop, id=names(seppop(genind_out)),stringsAsFactors=F)
+
+        popDF <- merge(merge(popDF,numAll),hedf)
+
+print("this far2")
+        
+        na.lat.fit <- lm(na~y,popDF)
+        na.lat.slope=c(coef(na.lat.fit)[2])
+        na.lat.int=c(coef(na.lat.fit)[1])
+
+        he.lat.fit <- lm(he~y,popDF)
+        he.lat.slope=c(coef(he.lat.fit)[2])
+        he.lat.int=c(coef(he.lat.fit)[1])
+
+        fsts = data.frame(fst=pairFst)
+        fsts = cbind(fsts,data.frame(t(sapply(strsplit(names(pairFst),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
+        fsts = fsts[order(fsts$to,fsts$from),]
+
+        dsts <- merge(dsts,fsts)
+
+print("this far3")
+        
+        IBD <- lm(log(fst)~log(d),dsts)
+        ibd.slope <- c(coef(IBD)[2])
+        ibd.int <- c(coef(IBD)[1])
+        bs <- segmentGLM(c(dsts$d),log(c(dsts$fst)))
+
+	stats = c(SNPs, localSNP, localHo, total_Ho, privateSNP, total_priv, pairFst, tot_Fst,
+                  ibd.slope=ibd.slope,ibd.int=ibd.int,bs.break=bs[1],bs.ll=bs[2],
+                  na.lat.slope=na.lat.slope,
+                  na.lat.int=na.lat.int, he.lat.slope=he.lat.slope, he.lat.int=he.lat.int)
+        
 	stats1 = matrix(data=stats, nrow = 1)
 	colnames(stats1) = names(stats)
 	stats = as.data.frame(stats1)
