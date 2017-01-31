@@ -59,7 +59,7 @@ recolonizeLandscape <- function(
 
   S <- matrix(0, nrow = s*h, ncol = s*h)
 # R <- matrix(0, nrow = s*h, ncol = s*h)
-  migmat <- landscape.mig.matrix(h=h,s=s,h.dim=c(ydim,xdim),mig.model="distance",distance.fun=distancePDF,
+  migmat <- landscape.mig.matrix(h=h,s=s,h.dim=c(xdim,ydim),mig.model="distance",distance.fun=distancePDF,
                                    ssc=shortscale,ssh=shortshape,
                                    lmn=longmean,lsd=longmean,mix=mix)
   R <- migmat$R*dens.scale
