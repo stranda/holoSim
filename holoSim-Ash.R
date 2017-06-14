@@ -30,6 +30,7 @@ source("make-landscape2.R") #changed so pops grow, fecundity increased (1.05 -> 
 source("getpophist3.R") #changed to track population abundance at beginning and end of window specified for getC4(), also new logical test!
 source("plothist.R")  #Unchanged
 source("segment-regression.R")
+source("fast_mask.R") #New data masking step, shorter loop than previous version
 
 
 dm = read.csv("data_mask.csv", header = TRUE)
@@ -138,7 +139,7 @@ while(repl <= nrep) {
 		while(SNPloci < nSNP & FSCtries < 5) {
 			FSCtries = FSCtries+1
 			out = runFSC(pops=pops, rland = l, parms =parms, sample_pops = samp_pops, sample_n = sampn, label = paste0("Ash_", node, "-", repl), marker = marker, nloci = nloci, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step")
-			out2 = mask.data(out, popDF, nSNP, mask = dm)
+			out2 = mask.data2(out, popDF, nSNP, mask = dm)
 			SNPloci = get.nSNP(out2)
 		}
 
