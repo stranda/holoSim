@@ -1,7 +1,7 @@
 # holoSim
 R scripts and data for running coupled (spatially explicit) forward and coalescent simulations 
 
-#R scripts
+#R scripts  
 <i>holoSim-Ash.R</i>
 
 	This is the main one.  Start here.  It sources in other scripts and runs nrep simulations.  
@@ -53,6 +53,13 @@ R scripts and data for running coupled (spatially explicit) forward and coalesce
 	the original from Allan's work.  Not changed, included so you can check out colonization history, if interested.
 	Note, it doesn't like NA's in the pops object
 		Use: plothist(pops[is.na(pops$arrive) == FALSE,]) 
+		
+<i>fast_mask.R</i>
+
+	An alternative function for masking missing data from a simulated gtypes object.  Previous version looped over 
+	the number of SNPs in the dataset, this version applies the mask to the first nSNP loci, checks for any that are
+	no longer variable, and loops over the list of loci that need to be fixed.  Saves some time in small datasets (Ash)
+	and substantially more in large datasets (Goby).
 		
 #Data Files
 
