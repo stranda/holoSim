@@ -124,8 +124,7 @@ get.nSNP = function(out) {
 }
 
 
-#This gets off when <347 variable loci in the file...
-#Need this to work!
+#Deprecated... use mask.data2 from fast_mask.R source file
 mask.data = function(out, popDF, nSNP, mask=dm) {
 
 	require(hierfstat)
