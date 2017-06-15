@@ -1,4 +1,4 @@
-getStats = function(out) {
+getStats = function(out, popDF, extent) {
 
 	freqs = alleleFreqs(out, TRUE)
 	popid = strataNames(out)
@@ -69,19 +69,96 @@ getStats = function(out) {
 	names(HeALL) = "HeALL"
 
 	#Simple Fst calculation...
-	pwFst = c()
-	for(pair in 1:length(combos[1,])) {
-		subset = which(nind_mat[,combos[1,pair]] > 0 & nind_mat[,combos[2,pair]] > 0)
-		Hs_tmp = (nind_mat[subset,combos[1,pair]]*Hetmp[subset,combos[1,pair]] + nind_mat[subset,combos[2,pair]]*Hetmp[subset,combos[2,pair]])/(nind_mat[subset,combos[1,pair]]+nind_mat[subset,combos[2,pair]])
-		combo_freq = (nind_mat[subset,combos[1,pair]]*freqmat[subset,combos[1,pair]] + nind_mat[subset,combos[2,pair]]*freqmat[subset,combos[2,pair]])/(nind_mat[subset,combos[1,pair]]+nind_mat[subset,combos[2,pair]])
-		Ht_tmp = 1-combo_freq^2-(1-combo_freq)^2
-		Fst_tmp = (Ht_tmp-Hs_tmp)/Ht_tmp
-		pwFst[pair] = mean(Fst_tmp, na.rm = TRUE)
-		names(pwFst)[pair] = paste0(combos[1,pair],".",combos[2,pair])
-		rm(subset, Hs_tmp, combo_freq, Ht_tmp, Fst_tmp)
-	}
+	#pwFst = c()
+	#for(pair in 1:length(combos[1,])) {
+	#	subset = which(nind_mat[,combos[1,pair]] > 0 & nind_mat[,combos[2,pair]] > 0)
+	#	Hs_tmp = (nind_mat[subset,combos[1,pair]]*Hetmp[subset,combos[1,pair]] + nind_mat[subset,combos[2,pair]]*Hetmp[subset,combos[2,pair]])/(nind_mat[subset,combos[1,pair]]+nind_mat[subset,combos[2,pair]])
+	#	combo_freq = (nind_mat[subset,combos[1,pair]]*freqmat[subset,combos[1,pair]] + nind_mat[subset,combos[2,pair]]*freqmat[subset,combos[2,pair]])/(nind_mat[subset,combos[1,pair]]+nind_mat[subset,combos[2,pair]])
+	#	Ht_tmp = 1-combo_freq^2-(1-combo_freq)^2
+	#	Fst_tmp = (Ht_tmp-Hs_tmp)/Ht_tmp
+	#	pwFst[pair] = mean(Fst_tmp, na.rm = TRUE)
+	#	names(pwFst)[pair] = paste0(combos[1,pair],".",combos[2,pair])
+	#	rm(subset, Hs_tmp, combo_freq, Ht_tmp, Fst_tmp)
+	#}
 
-	stats = c(localSNP, Smean, Ssd, privateSNP, prSmean, prSsd, total_priv, pwPriv, He, HeALL, pwFst)
+	#Using hierfstat to do this instead
+    genind_out = gtypes2genind(out)
+
+	FstMat = pairwise.fst(genind_out, pop = genind_out$pop)
+	pairFst = as.vector(FstMat)
+	Fstnames = c()
+	#This will be different...
+	for(pid in 1:(length(popDF$id)-1)) {
+		Fstnames = c(Fstnames, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
+	}
+	names(pairFst) = Fstnames
+
+########### some spatially focused stats
+###     get pop coords:
+        pops=t(matrix(1:prod(extent),ncol=extent[1]))
+        popcrd=data.frame(t(sapply(popDF$grid.cell,function(i) {which(pops==i,arr.ind=T)})))
+        names(popcrd)=c("y","x")
+        popDF=cbind(popDF,popcrd)
+        
+###     get pairwise distances
+        pdist=as.matrix(dist(popDF[,c("x","y")]))
+        colnames(pdist) <- popDF$id
+        rownames(pdist) <- colnames(pdist)
+        diag(pdist) <- NA
+        pdist[upper.tri(pdist)] <- NA
+        dsts = as.data.frame(as.table(pdist))
+        dsts = dsts[complete.cases(dsts),]
+        names(dsts) <- c("to","from","d")
+        dsts$from <- as.character(dsts$from)
+        dsts$to <- as.character(dsts$to)
+        dsts <- dsts[order(dsts$to,dsts$from),]
+
+print("this far")
+
+        sum_stats_gi<-summary(genind_out)
+        numAll=sum_stats_gi$pop.n.all
+        numAll=data.frame(id=names(numAll),na=numAll,stringsAsFactors=F)
+
+        he_by_pop<-as.vector(as.numeric(lapply(lapply(seppop(genind_out),summary),
+                                               function(x) mean(x$Hexp))))
+
+        hedf <- data.frame(he=he_by_pop, id=names(seppop(genind_out)),stringsAsFactors=F)
+
+        popDF <- merge(merge(popDF,numAll),hedf)
+
+print("this far2")
+        
+        na.lat.fit <- lm(na~y,popDF)
+        na.lat.slope=c(coef(na.lat.fit)[2])
+        na.lat.int=c(coef(na.lat.fit)[1])
+
+        he.lat.fit <- lm(he~y,popDF)
+        he.lat.slope=c(coef(he.lat.fit)[2])
+        he.lat.int=c(coef(he.lat.fit)[1])
+
+        fsts = data.frame(fst=pairFst)
+        fsts = cbind(fsts,data.frame(t(sapply(strsplit(names(pairFst),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
+        fsts = fsts[order(fsts$to,fsts$from),]
+
+        dsts <- merge(dsts,fsts)
+
+print("this far3")
+        
+        IBD <- lm(log(fst)~log(d),dsts)
+        ibd.slope <- c(coef(IBD)[2])
+        ibd.int <- c(coef(IBD)[1])
+        bs <- segmentGLM(c(dsts$d),log(c(dsts$fst)))
+
+	stats = c(localSNP, Smean, Ssd, privateSNP, prSmean, prSsd, total_priv, pwPriv, He, HeALL, pairFst,
+                  ibd.slope=ibd.slope,ibd.int=ibd.int,bs.break=bs[1],bs.ll=bs[2],
+                  na.lat.slope=na.lat.slope,
+                  na.lat.int=na.lat.int, he.lat.slope=he.lat.slope, he.lat.int=he.lat.int)
+        
+	stats1 = matrix(data=stats, nrow = 1)
+	colnames(stats1) = names(stats)
+	stats = as.data.frame(stats1)
 	stats
 }
+
+
 
