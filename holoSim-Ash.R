@@ -30,6 +30,7 @@ source("make-landscape2.R") #changed so pops grow, fecundity increased (1.05 -> 
 source("getpophist3.R") #changed to track population abundance at beginning and end of window specified for getC4(), also new logical test!
 source("plothist.R")  #Unchanged
 source("segment-regression.R")
+source("new_mask.R")
 
 
 dm = read.csv("data_mask.csv", header = TRUE)
