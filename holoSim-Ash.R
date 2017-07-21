@@ -83,7 +83,7 @@ while(repl <= nrep) {
 	mu = runif(1,1e-8, 1e-7)
 
 	#Bind all parameters into a dataframe
-	parms = data.frame(node, repl, time_convert, col_window[1], col_window[2], dens.scale, xdim, ydim, seq.length, nloci, nSNP, seq.length, local_N, ref_N, texp, refconfig, mix, longmean, shortscale, Ne, found_Ne, ref_Ne, preLGM_Ne, preLGM_t, mu)
+	parms = data.frame(node, repl, time_convert, col_window[1], col_window[2], dens.scale, xdim, ydim, seq.length, nloci, nSNP, local_N, ref_N, texp, refconfig, mix, longmean, shortscale, Ne, found_Ne, ref_Ne, preLGM_Ne, preLGM_t, mu)
 	#Set up the rmetasim landscape based on these parameters
 	h = parms$xdim*parms$ydim
 	local_k = rep(local_N, h)
