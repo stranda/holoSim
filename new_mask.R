@@ -24,13 +24,19 @@ mask.data = function(tmpout, popDF, nSNP, mask) {
 #	Turn this on and run up to this point for a check on whether pops were being shuffled
 #	named_out = df2gtypes(to.mask,ploidy=2,id.col=1,strata.col=2)  
 
-#	First attempt at masking will use the first nSNP loci (two columns per locus in to.mask)
-	masked = to.mask[,1:(2*nSNP+2)]
+#	all1 gives the column number where the first allele of all loci sits
+	all1 = seq(3,dim(to.mask)[2],2)
+	
+#	First attempt at masking used the first nSNP loci (two columns per locus in to.mask)
+#	However, with the infinite sites model we want to break up potential associations between SNPs on the same chrom
+#	version 2 samples to form the initial dataset
+	starters = sample(all1, nSNP, replace = FALSE)
+	masked = to.mask[,c(1:2,sort(c(starters, starters+1)))]
+#	masked = to.mask[,1:(2*nSNP+2)]
 #	masked and mask should have the same dimensions, strata order 
 	masked[mask==TRUE] = NA
 
-#	all1 gives the column number where the first allele of all loci sits
-	all1 = seq(3,dim(to.mask)[2],2)
+
 
 #	onecoldata is a one-column genetic dataset, only used to check for polymorphism following mask
 	onecoldata = matrix(data = NA, nrow = 2*dim(masked)[1], ncol = nSNP)
@@ -43,7 +49,7 @@ mask.data = function(tmpout, popDF, nSNP, mask) {
 	to.fix = which(fixme == 1)
 
 # 	inuse gives the columns for the loci (both alleles) that are currently in the dataset
-	inuse = sort(c(all1[1:nSNP], all1[1:nSNP]+1))
+	inuse = sort(c(starters, starters+1))
 
 #	looping over the list of loci that need replacing
 	if(length(to.fix) > 0) {
