@@ -32,7 +32,23 @@ runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sam
 	pop.info = fscPopInfo(pop.size = pop.size, sample.size = sample.size, growth.rate = growth.rate)	
 
 #LOCUS.PARAMS 
-	locus.params = fscLocusParams(locus.type = marker, num.loci = nloci, mut.rate = parms$seq.length*parms$mu)
+	#Using createLocusParams() function, from strataG, directly
+	createLocusParams <- function(chr, type, num.markers, recomb.rate, 
+        	param.4, param.5, param.6, ploidy, num.chrom) {
+	        if (is.null(chr)) 
+        	    chr <- 1
+	        df <- data.frame(chromosome = chr, type = type, num.markers = num.markers, 
+        	    recomb.rate = recomb.rate, param.4 = param.4, param.5 = param.5, 
+	            param.6 = param.6, stringsAsFactors = FALSE)
+        	df <- df[order(df$chromosome), ]
+	        attr(df, "num.chrom") <- num.chrom[1]
+	        attr(df, "ploidy") <- ploidy
+	        return(df)
+	}
+
+	fscmodel[[3]] = createLocusParams(1,"SNP",1,0,1/(2*sum(sample.size)),NA,NA,2,nSNP) 
+	attr(fscmodel[[3]], "opts") <- "-s"
+	#locus.params = fscLocusParams(locus.type = marker, num.loci = nloci, mut.rate = parms$seq.length*parms$mu)
 
 #MIGRATION MATRICES
 	full_IDs = pops$pop[-empty_pops]
