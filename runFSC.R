@@ -1,7 +1,7 @@
 #runFSC.R
 #Script to run Fastsimcoal using strataG
 
-runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sample_n = NULL, label = "test", marker = "snp", nloci = 500, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step") {
+runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sample_n = NULL, label = "test", marker = "dna", nloci = 500, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step") {
 	
 
 	#ID the empty pops
@@ -32,24 +32,10 @@ runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sam
 	pop.info = fscPopInfo(pop.size = pop.size, sample.size = sample.size, growth.rate = growth.rate)	
 
 #LOCUS.PARAMS 
-	#Using createLocusParams() function, from strataG, directly
-	createLocusParams <- function(chr, type, num.markers, recomb.rate, 
-        	param.4, param.5, param.6, ploidy, num.chrom) {
-	        if (is.null(chr)) 
-        	    chr <- 1
-	        df <- data.frame(chromosome = chr, type = type, num.markers = num.markers, 
-        	    recomb.rate = recomb.rate, param.4 = param.4, param.5 = param.5, 
-	            param.6 = param.6, stringsAsFactors = FALSE)
-        	df <- df[order(df$chromosome), ]
-	        attr(df, "num.chrom") <- num.chrom[1]
-	        attr(df, "ploidy") <- ploidy
-	        return(df)
-	}
-
-	fscmodel[[3]] = createLocusParams(1,"SNP",1,0,1/(2*sum(sample.size)),NA,NA,2,nSNP) 
-	attr(fscmodel[[3]], "opts") <- "-s"
-	#locus.params = fscLocusParams(locus.type = marker, num.loci = nloci, mut.rate = parms$seq.length*parms$mu)
-
+	locus.params = fscLocusParams(locus.type = marker, num.loci = nloci, mut.rate = parms$seq.length*parms$mu)
+	attr(fscmodel[[3]], "ploidy") = 2
+	attr(fscmodel[[3]], "opts") = "-I -s"
+	
 #MIGRATION MATRICES
 	full_IDs = pops$pop[-empty_pops]
 	full_pops = pops[-empty_pops,]
@@ -119,9 +105,145 @@ runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sam
 
 
 	#out = fastsimcoal(label = label, pop.info = pop.info, locus.params = locus.params, mig.rates = migmat, hist.ev = hist.ev)
-	out = fastsimcoal(label = label, pop.info = pop.info, locus.params = locus.params, mig.rates = migmat, hist.ev = hist.ev, num.cores = num.cores, delete.files = delete.files, exec = exec)
+	out = myfsc(label = label, pop.info = pop.info, locus.params = locus.params, mig.rates = migmat, hist.ev = hist.ev, num.cores = num.cores, delete.files = delete.files, exec = exec)
 
 	out
 }
 
+#myfsc()
+#Changed from strataG's fastsimcoal() fxn (turning off -S option, only output polymorphic sites)
+myfsc = function (pop.info, locus.params, mig.rates = NULL, hist.ev = NULL, 
+    label = NULL, quiet = TRUE, delete.files = TRUE, exec = "fsc252", 
+    num.cores = NULL, label.haplotypes = TRUE) 
+{
+    if (is.null(label)) 
+        label <- "fsc.run"
+    label <- make.names(label)
+    if (file.exists(label)) 
+        for (f in dir(label, full.names = T)) file.remove(f)
+    if (!quiet) 
+        cat("fastsimcoal: writing input file\n")
+    infile <- fscWrite(pop.info = pop.info, locus.params = locus.params, 
+        mig.rates = mig.rates, hist.ev = hist.ev, label = label)
+    if (!quiet) 
+        cat("fastsimcoal: running\n")
+    cores.spec <- if (!is.null(num.cores)) {
+        num.cores <- max(1, num.cores)
+        num.cores <- min(num.cores, min(detectCores(), 12))
+        if (num.cores == 1) 
+            ""
+        else paste(c("-c", "-B"), num.cores, collapse = " ")
+    }
+    else ""
+    cmd.line <- paste(exec, "-i", infile, "-n 1", ifelse(quiet, 
+        "-q", ""), cores.spec, attr(locus.params, "opts"))
+    err <- if (.Platform$OS.type == "unix") {
+        system(cmd.line, intern = F)
+    }
+    else {
+        shell(cmd.line, intern = F)
+    }
+    if (err == 0) {
+        if (!quiet) 
+            cat("fastsimcoal exited normally\n")
+    }
+    else {
+        stop("fastsimcoal exited with error ", err, "\n")
+    }
+    arp.file <- file.path(label, paste(label, "_1_1.arp", sep = ""))
+    if (!file.exists(arp.file)) 
+        stop("fastsimcoal did not generate output")
+    if (!quiet) 
+        cat("fastsimcoal: parsing output to gtypes\n")
+    g <- myfscRead(arp.file, locus.params, label.haplotypes)
+    if (delete.files) {
+        if (!quiet) 
+            cat("fastsimcoal: removing output files\n")
+        unlink(label, recursive = TRUE, force = TRUE)
+        file.remove(infile)
+        file.remove("seed.txt")
+    }
+    return(g)
+}
 
+#myfscRead()
+#Changed from fscRead() function in strataG
+#This version greps the number of polymorphic sites from the arlequin file
+#Allows simulation of infinite sites model (i.e., strataG no longer expects a dataset of num.chrom * num.markers bp)
+myfscRead = function (file, locus.params, label.haplotypes = FALSE) 
+{
+    .formatGenotypes <- function(x, ploidy) {
+    	require(swfscMisc)
+        nloci <- ncol(x) - 2
+        loc.end <- seq(ploidy, nrow(x), by = ploidy)
+        gen.data <- do.call(rbind, lapply(loc.end, function(i) {
+            allele.i <- (i - ploidy + 1):i
+            loci <- as.vector(x[allele.i, -(1:2)])
+            id <- paste(x[allele.i, 2], collapse = ".")
+            pop <- x[allele.i[1], 1]
+            c(id, pop, loci)
+        }))
+        locus_names <- paste("Locus", zero.pad(1:nloci), sep = "_")
+        locus_names <- paste(rep(locus_names, each = ploidy), 
+            1:ploidy, sep = ".")
+        colnames(gen.data) <- c("id", "pop", locus_names)
+        gen.data
+    }
+
+    .formatDNA <- function(dna.seq, pop, locus.params, label) {
+        #arp.file <- file.path(label, paste(label, "_1_1.arp", sep = ""))
+        #num.chrom <- attr(locus.params, "num.chrom")
+        num.chrom = system(paste("grep 'Total number of polymorphic sites:'", file, "| cut -f 2 -d : | cut -f 2 -d ' '"), intern = TRUE)
+        chrom.pos <- if (is.null(num.chrom)) {
+            tapply(locus.params$num.markers, locus.params$chromosome, 
+                sum)
+        }
+        else {
+            rep(sum(1), num.chrom)
+        }
+        chrom.pos <- cumsum(chrom.pos)
+        chrom.pos <- cbind(start = c(1, chrom.pos[-length(chrom.pos)] + 
+            1), end = chrom.pos)
+        rownames(dna.seq) <- pop
+        dna.seq <- tolower(dna.seq)
+        new("multidna", lapply(1:nrow(chrom.pos), function(i) {
+            as.matrix(dna.seq)[, chrom.pos[i, "start"]:chrom.pos[i, 
+                "end"]]
+        }))
+    }
+    #print("reading file")
+    f <- readLines(file)
+    start <- grep("SampleData=", f) + 1
+    end <- which(f == "}") - 2
+    pos <- cbind(start, end)
+    .compileMatrix <- function(i, pos) {
+        f.line <- f[pos[i, 1]:pos[i, 2]]
+        f.line <- gsub("[[:space:]]+", "--", f.line)
+        result <- do.call(rbind, strsplit(f.line, "--"))[, -2]
+        cbind(rep(paste("Sample", i), nrow(result)), result)
+    }
+    #print("compiling matrix")
+    data.mat <- do.call(rbind, lapply(1:nrow(pos), .compileMatrix, 
+        pos = pos))
+    ploidy <- attr(locus.params, "ploidy")
+    data.type <- f[grep("DataType=", f)]
+    data.type <- gsub("\tDataType=", "", data.type)
+    switch(data.type, DNA = {
+    	#print("splitting strings")
+        dna.seq <- do.call(rbind, strsplit(data.mat[, 3], ""))
+        if (attr(locus.params, "ploidy") == 2) {
+            gen.data <- .formatGenotypes(cbind(data.mat[, 1:2], 
+                dna.seq), ploidy)
+            df2gtypes(gen.data, ploidy, description = file)
+        } else {
+        	#print("formatting DNA")
+            dna.seq <- .formatDNA(dna.seq, data.mat[, 2], locus.params)
+            #print("seq2gtype - SOMETHING IS WRONG HERE!!!  Has to do with creation of gen.data")
+            g <- sequence2gtypes(dna.seq, strata = data.mat[,1], description = file)
+            if (label.haplotypes) labelHaplotypes(g)$gtype else g
+        }
+    }, MICROSAT = {
+        gen.data <- .formatGenotypes(data.mat, ploidy)
+        df2gtypes(gen.data, ploidy, description = file)
+    }, NULL)
+}
