@@ -63,7 +63,6 @@ simout = vector("list",nrep)
 
 repl = 1
 while(repl <= nrep) {
-	
 	#Draw forward sim parameter values from (eventually hyper)priors 
 	texp = round(runif(1, (10000/time_convert),(20000/time_convert)))
 	refs = sample(c(148,148,148),1,replace = TRUE)   #Right now only allowing a refuge in Southeast Texas
@@ -140,9 +139,12 @@ while(repl <= nrep) {
 			FSCtries = FSCtries+1
 			out = runFSC(pops=pops, rland = l, parms =parms, sample_pops = samp_pops, sample_n = sampn, label = paste0("Ash_", node, "-", repl), marker = marker, nloci = nloci, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step")
 			out2 = mask.data(out, popDF, nSNP, mask = dm)
+			if(!is.gtypes(out2)) {
+				parms$nloci = parms$nloci*2	
+			}
 			SNPloci = get.nSNP(out2)
 		}
-
+		
 #This is the second checkpoint.  If you can't make a dataset of 347 SNPs with the missing data structure, move on
 #Allows 5 tries with fastsimcoal
 	#If the right number of SNPs come out of the simulation, write a line, otherwise replicate is skipped
