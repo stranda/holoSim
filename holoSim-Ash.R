@@ -140,6 +140,9 @@ while(repl <= nrep) {
 			FSCtries = FSCtries+1
 			out = runFSC(pops=pops, rland = l, parms =parms, sample_pops = samp_pops, sample_n = sampn, label = paste0("Ash_", node, "-", repl), marker = marker, nloci = nloci, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step")
 			out2 = mask.data(out, popDF, nSNP, mask = dm)
+			if(!is.gtypes(out2)) {
+				parms$mu = parms$mu*2	
+			}
 			SNPloci = get.nSNP(out2)
 		}
 
