@@ -1,0 +1,22 @@
+---
+title: "coalescent_tries"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(coala)
+
+model <- coal_model(sample_size = 360, loci_number = 1, loci_length = 80) + 
+  feat_mutation(rate=1)+
+  sumstat_seg_sites() 
+
+for (i in 1:2999)    model <- model + locus_single(80)  
+
+system.time({res = simulate(model)})
+
+```
+
