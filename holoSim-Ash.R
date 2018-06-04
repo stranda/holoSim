@@ -4,54 +4,72 @@
 ################################
 #Set number of replicates and node (CPU)
 args = commandArgs(TRUE)
+#if (length(args)>0)
+if (FALSE)
+{
 node = as.numeric(args[1])   #This is the computer being used
 nrep = as.numeric(args[2])   #This is the number of replicates run
 #use -
 # Rscript holoSim_Ash.R 1 100 
 # to run 100 replicates on the first CPU
 # output will be Ash_<node>.out
+} else {
+   node = 2
+   nrep = 3
+}
 
-#node = 0
-#nrep = 10
-#Rsource = "~/Google Drive/MSU/HOLOSIM/Software/SimTemplate/github/"
-#SIMS="~/Desktop/AshSims"
-Rsource = "~/GoogleDrive/src/holoSim/"
-SIMS="~/tmp/AshSims"
+Rsource = "."
+SIMS=paste0("/var/tmp/Ash")
+
+#Rsource = "~/GoogleDrive/src/holoSim/"
+#SIMS="~/tmp/AshSims"
 #Rsource = "/mnt/research/ABC/holoSim/Rsource/"
 #SIMS = "/mnt/research/ABC/holoSim/Ash/"
 
-setwd(Rsource)
+#setwd(Rsource)
+
+
+#Load libraries
+library(rmetasim)
+library(strataG)
+library(compiler)
+library(sys)
+library(parallel)
+
+
 source("colrate.R") #Fxns to calculate colonization rate measures
 source("runFSC.R")  #Uses strataG to run fastsimcoal, given pops, rland, parms, etc.
 source("empty_or_sampled.R") #Vectors of empty grid cells, sampled grid cells, sample sizes
 source("holoStats.R") #Functions to calculate stats from simulations, mask data, count SNPs
 #Load stuff from Allan's fastsim folder
 source("make-landscape2.R") #changed so pops grow, fecundity increased (1.05 -> 1.2), also changed popcoords fxn to fix numbering
-source("getpophist3.R") #changed to track population abundance at beginning and end of window specified for getC4(), also new logical test!
+source("landscape-functions.R")
+source("getpophist4.R") #changed to track population abundance at beginning and end of window specified for getC4(), also new logical test!
 source("plothist.R")  #Unchanged
 source("segment-regression.R")
-source("new_mask.R")
+#source("new_mask.R")
+source("helper-functions.R")
 
+#if(!dir.exists(SIMS)) {dir.create(SIMS)}
+#setwd(SIMS)
 
-dm = read.csv("data_mask.csv", header = TRUE)
+cores = 1
 
-setwd(SIMS)
+#enableJIT(3)
 
-#Load libraries
-library(rmetasim)
-library(strataG)
-library(hierfstat)
-library(parallel)
+###FastSimcoal can 'run away' under certain conditions. We set the next parameter to the time we wait
+###in seconds before giving up on these params
+fsctimeout = 690
 
-#Set fixed aspects of simulations
+####Set fixed aspects of simulations
 time_convert = 30 #Assumes 30 years per time click (=1 generation)
 col_window = c(0,round((2000/time_convert)))
 dens.scale = 0.05
 xdim = 27 
 ydim = 20
 marker = "snp"
-nloci = 750 
-nSNP = 347 
+nloci = 3350
+nSNP = 2909
 seq.length = 80  #Length of individual RAD contigs -- scales mutation rate for fscLocusParams()
 
 #I think these may be important... may require some thought / adjustment
@@ -66,7 +84,7 @@ while(repl <= nrep) {
 	
 	#Draw forward sim parameter values from (eventually hyper)priors 
 	texp = round(runif(1, (10000/time_convert),(20000/time_convert)))
-	refs = sample(c(148,148,148),1,replace = TRUE)   #Right now only allowing a refuge in Southeast Texas
+	refs = sample(c(9,148,378,98),1,prob=c(0.33,0,0.33,0.34))   # 9=texas, 148=TN, 378=NB. 98=SC
 	refconfig = paste(refs,sep="", collapse=".")
 	
 	mix = runif(1, 0.001, 0.1)  #0.1% to 10% LDD?
@@ -80,7 +98,7 @@ while(repl <= nrep) {
 	ref_Ne = round(runif(1, 500, Ne))
 	preLGM_Ne = round(runif(1,10000,100000))
 	preLGM_t = round(runif(1,(100000/time_convert),(150000/time_convert)))
-	mu = runif(1,1e-8, 1e-7)
+	mu = runif(1,1e-7, 1e-6)
 
 	#Bind all parameters into a dataframe
 	parms = data.frame(node, repl, time_convert, col_window[1], col_window[2], dens.scale, xdim, ydim, seq.length, nloci, nSNP, local_N, ref_N, texp, refconfig, mix, longmean, shortscale, Ne, found_Ne, ref_Ne, preLGM_Ne, preLGM_t, mu)
@@ -100,15 +118,19 @@ while(repl <= nrep) {
                             longmean=longmean,
                             shortscale=shortscale
                             )
-
+    print (date())
 	missing_sampled = length(samp_pops)
 	pops = c()
 
+
+    print(parms)
+    
 	#May need some kind of kill switch for this loop...
 	forward=0
 	while(missing_sampled > 0 & forward < 10) {
 		forward = forward+1
 		while(is.data.frame(pops) == FALSE) {
+                    print("trying getpophist")
 			pops = try(getpophist(l, maxtime=texp, window = col_window))
 		}
 		missing_sampled = length(which(is.na(pops$arrive[samp_pops]) == TRUE))
@@ -117,7 +139,7 @@ while(repl <= nrep) {
 #This is the first big check point.  Possible that parameters don't allow colonization of the whole landscape
 #If that happens, move on to the next replicate
 #Allows 10 tries to fill all populations that we've sampled
-	if(missing_sampled == 0) {
+    if(missing_sampled == 0) {
 	#Calculate movement rate over the specified window
 		parms$C1 = getC(pops, window = col_window)
 		parms$C1n = getCn(pops, window = col_window)
@@ -133,45 +155,68 @@ while(repl <= nrep) {
 		parms$C4n = getC4n(pops, window = col_window)
 		parms$C4s = getC4s(pops, window = col_window)
 
-	#Run the simulation
+                                        #Run the simulation
+            print(date())
 		SNPloci = 0
 		FSCtries = 0
-		while(SNPloci < nSNP & FSCtries < 5) {
-			FSCtries = FSCtries+1
-			out = runFSC(pops=pops, rland = l, parms =parms, sample_pops = samp_pops, sample_n = sampn, label = paste0("Ash_", node, "-", repl), marker = marker, nloci = nloci, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step")
-			out2 = mask.data(out, popDF, nSNP, mask = dm)
-			SNPloci = get.nSNP(out2)
-		}
+		while((SNPloci < nSNP) & (FSCtries < 2)) {
+                    FSCtries = FSCtries+1
+                    
+                    out=NULL
+                    out = tryCatch(
+                    {
+                        eval_safe( #allows timeout
+                        {
+                            runFSC(pops=pops, rland = l, parms =parms, sample_pops = samp_pops, sample_n = sampn, label = paste0("Ash_", node, "-", repl), marker = marker, nloci = nloci, delete.files = T, num.cores = cores, exec="fsc251", growth.model = "step")
+                        },timeout=fsctimeout)
+                    },
+                                   warning=function(w){print(w)},
+                                   error=function(e){print(e); NULL})
 
-#This is the second checkpoint.  If you can't make a dataset of 347 SNPs with the missing data structure, move on
+                    if (!is.null(out))
+                    {
+                        out2 = out
+                        SNPsum = get.gSum(out2)
+                        SNPloci = SNPsum$nvar
+                    } else {
+                        print("fsc timed out")
+                        SNPsum=list(NULL,NULL)
+                        SNPloci = 0
+                    }
+                    }
+                    
+                    print(date())
+            
+#This is the second checkpoint.  If you can't make a dataset of 2911 SNPs with the missing data structure, move on
 #Allows 5 tries with fastsimcoal
 	#If the right number of SNPs come out of the simulation, write a line, otherwise replicate is skipped
-		if(SNPloci == nSNP) {
-			
-                    print("about to run holostats")
-			stats = holoStats(out2, popDF, extent=c(ydim,xdim))
-                    print("done running holostats")
-                    
-###risky to wait till end of loop to save, but makes for really convenient data structure
-###I propose not running too many reps per node, but using lots of nodes?
-###still saving the original way for stats output.
-###                     save(parms, out2, file = paste0("Ash_", node,"-",repl,".Rda"))
-                    simout[[repl]] <- list(out=out2, parms=parms, popDF=popDF, stats=stats)
+            if (SNPloci >= nSNP)
+            {
+                ## assign proper ids to FSC output
+               
+                out2=fsc.rename(out=out2,popDF=popDF,dip=TRUE)
 
-			done = format(Sys.time(), "%H:%M:%S")   #Better time?  t2-t1 would need a tweak to always measure on the same scale
-			#Print all parms and stats to a file
-			if(!file.exists(paste0("Ash_", node,".out"))) {
-				write.table(cbind(parms,stats,done), paste0("Ash_", node,".out"), quote = FALSE, row.names = FALSE)
-			} else {
-				write.table(cbind(parms,stats,done), paste0("Ash_", node,".out"), col.names = FALSE, quote = FALSE, row.names = FALSE, append = TRUE)
-			}
+                if (SNPloci>nSNP) out2=out2[,which(SNPsum$nall>1)[1:nSNP],]  #subsets to just the loci needed
 
-			#Advance the replicate counter
-			repl = repl+1
+#                save(file="tmpout.rda",out2)
+                print("about to run holostats")
+                stats = holoStats(out2, popDF, extent=c(ydim,xdim),cores=cores)
+                print("done running holostats")
 
-		}
+                done = format(Sys.time(), "%H:%M:%S")   #Better time?  t2-t1 would need a tweak to always measure on the same scale
+                simout[[repl]] <- cbind(parms,stats,done)
+                repl = repl+1
+
+            }
 	}
 }
 
-save(file=paste0("Ash_",node,"_",gsub(" ","",date()),".rda"),simout)
+simoutdf <- do.call(rbind, simout)
+
+write.table(file=paste0("Ash_",floor(runif(1,0,100000)),"_",gsub(" ","",date()),".csv"),sep=",",row.names=F,simoutdf)
+
+
+
+print(date())
+
 

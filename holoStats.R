@@ -1,52 +1,71 @@
 #holoStats.R 
 #Script to define a function to calculate stats for holoSim ABC simulations
 
-holoStats = function(out, popDF, extent) {
-	require(hierfstat)
+holoStats.r = function(out, popDF, extent, cores=1) {
+    
+    allMAF = mafreq(out)
+    totalHe = 2*allMAF*(1-allMAF)
+    popid = strataNames(out)
+    
+    SNPs = sum(allMAF<1)
+    names(SNPs) = "tot_SNPs"
+    
+    split_out = strataSplit(out) #list of strataG objects for each pop
+###    locMAF = sapply(split_out,function(o){mafreq(o)})
+    locMAF = do.call(cbind,mclapply(split_out,mc.cores=cores,function(o){mafreq(o)}))
+    colnames(locMAF) <- names(split_out)
+    locHe = colMeans(2*locMAF*(1-locMAF))
+    varlocHe = apply(2*locMAF*(1-locMAF),2,var)
+    
+    locN = sapply(split_out,function(o){length(o@data$ids)})
+    names(locN) <- popid
 
-        
-	popid = strataNames(out)
-	SNPs = as.numeric(table(summarizeLoci(out)[,3]))
-	names(SNPs) = "tot_SNPs"
-	split_out = strataSplit(out)
-	localHo = sapply(split_out, FUN=function(x){summary(x)$strata.smry})[5,]
-	localSNP = sapply(split_out, FUN=function(x){length(which(summarizeLoci(x)[,3] == 2))})
+    localSNP = apply(locMAF,2,function(x){sum(x<1)})
+    
+    names(localSNP) = paste0("S.", popid)
+    
+    ##not sure we need this, does not seem to be variable and costs some time
+    privateSNP = colSums(privateAlleles(out))
+                                        #privateSNP = privateSNP[sample.order]
+    names(privateSNP) = paste0("pS.", popid)
 
-	#sample.ids = unique(unlist(strsplit(colnames(localsum), split = " ")))[-1]
-	#sample.order = order(as.numeric(sample.ids))
+    total_priv = sum(privateSNP)
+    names(total_priv) = "tot_priv"
 
-	#localSNP = localSNP[sample.order]
-	names(localSNP) = paste0("S.", popid)
-	#localHo = localHo[sample.order]
-	names(localHo) = paste0("Ho.", popid)
+    pwhet=pwise.het(locMAF,locN,cores)
+    
+    FstMat.loc = as.dist(pwise.fst.loc(locMAF,allMAF,locN,pwhet))
+    neimat     = pwise.nei(locMAF,cores)
+    
+    pairnei = as.vector(neimat)
+    neinames = c()
+                                        #This will be different...
+    for(pid in 1:(length(popDF$id)-1)) {
+        neinames = c(neinames, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
+    }
+    
+    names(pairnei) = neinames
+    
+    pairFst.loc = as.vector(FstMat.loc)
+    Fstnames.loc = c()
+                                        #This will be different...
+    for(pid in 1:(length(popDF$id)-1)) {
+        Fstnames.loc = c(Fstnames.loc, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
+    }
+    
+    names(pairFst.loc) = Fstnames.loc
+    
+    tot_Fst = as.numeric(statFst(out)$result[1])
+    names(tot_Fst) = "tot_Fst"
 
-	#localSNP = sapply(split_out, FUN=function(x){(summary(x)$strata.smry[3]*360)-360}) 
-	#localHo = sapply(split_out, FUN=function(x){summary(x)$strata.smry[5]})
-
-	total_Ho = mean(obsvdHet(out))
-	names(total_Ho) = "tot_Ho"
-
-
-	privateSNP = colSums(privateAlleles(out))
-	#privateSNP = privateSNP[sample.order]
-	names(privateSNP) = paste0("pS.", popid)
-	
-	total_priv = sum(privateSNP)
-	names(total_priv) = "tot_priv"
-	
-	genind_out = gtypes2genind(out)
-	FstMat = pairwise.fst(genind_out, pop = genind_out$pop)
-	pairFst = as.vector(FstMat)
-	Fstnames = c()
-	#This will be different...
-	for(pid in 1:(length(popDF$id)-1)) {
-		Fstnames = c(Fstnames, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
-	}
-	names(pairFst) = Fstnames
-	
-	tot_Fst = as.numeric(statFst(out)$result[1])
-	names(tot_Fst) = "tot_Fst"
-
+    eucdist = dist(t(locMAF))
+    paireuc = as.vector(eucdist)
+    eucnames = c()
+    dnames = attr(eucdist,"Labels")
+     for(pid in 1:(length(popDF$id)-1)) {
+        eucnames = c(eucnames, paste0(popDF$id[pid],".", popDF$id[(pid+1):length(popDF$id)]))
+    }
+    names(paireuc) <- eucnames
 ########### some spatially focused stats
 ###     get pop coords:
         pops=t(matrix(1:prod(extent),ncol=extent[1]))
@@ -54,7 +73,7 @@ holoStats = function(out, popDF, extent) {
         names(popcrd)=c("y","x")
         popDF=cbind(popDF,popcrd)
         
-###     get pairwise distances
+###     get pairwise geo distances
         pdist=as.matrix(dist(popDF[,c("x","y")]))
         colnames(pdist) <- popDF$id
         rownames(pdist) <- colnames(pdist)
@@ -69,59 +88,99 @@ holoStats = function(out, popDF, extent) {
 
 print("this far")
         
-        sum_stats_gi<-summary(genind_out)
-        numAll=sum_stats_gi$pop.n.all
-        numAll=data.frame(id=names(numAll),na=numAll,stringsAsFactors=F)
+        #sum_stats_gi<-summary(genind_out)
+        #numAll=sum_stats_gi$pop.n.all
+        #numAll=data.frame(id=names(numAll),na=numAll,stringsAsFactors=F)
 
-        he_by_pop<-as.vector(as.numeric(lapply(lapply(seppop(genind_out),summary),
-                                               function(x) mean(x$Hexp))))
+#        he_by_pop<-as.vector(as.numeric(lapply(lapply(seppop(genind_out),summary),
+#                                               function(x) mean(x$Hexp))))
+    he_by_pop <- colMeans(2*locMAF*(1-locMAF))
 
-        hedf <- data.frame(he=he_by_pop, id=names(seppop(genind_out)),stringsAsFactors=F)
-
-        popDF <- merge(merge(popDF,numAll),hedf)
+    hedf <- data.frame(he=he_by_pop, id=unique(out@data$strata),stringsAsFactors=F)
+    pr=prcomp(t(locMAF))
+    pcadf <- data.frame(id=rownames(predict(pr)),pc1=predict(pr)[,1],pc2=predict(pr)[,2],pc3=predict(pr)[,3])
+    
+    popDF <- merge(pcadf,merge(popDF,hedf))
 
 print("this far2")
+    polyfit <- function(p,resp="he",ind="y",ord=1)
+    {
+        fit <- lm(p[,resp]~poly(p[,ind],ord))
+        c(coef(fit))
+    }
+
+    he.lat.stats <- polyfit(popDF,"he","y",ord=2)
+    names(he.lat.stats) <- paste0("helat.",c("int","frst","scnd"))
+    he.long.stats <- polyfit(popDF,"he","x",ord=2)
+    names(he.long.stats) <- paste0("helong.",c("int","frst","scnd"))
+    pc1.lat.stats <- polyfit(popDF,"pc1","y",ord=2)
+    pc1.long.stats <- polyfit(popDF,"pc1","x",ord=2)
+    names(pc1.lat.stats) <- paste0("pc1lat.",c("int","frst","scnd"))
+    names(pc1.long.stats) <- paste0("pc1long.",c("int","frst","scnd"))
+    pc2.lat.stats <- polyfit(popDF,"pc2","y",ord=2)
+    pc2.long.stats <- polyfit(popDF,"pc2","x",ord=2)
+    names(pc2.lat.stats) <- paste0("pc2lat.",c("int","frst","scnd"))
+    names(pc2.long.stats) <- paste0("pc2long.",c("int","frst","scnd"))
+
+    pc3.lat.stats <- polyfit(popDF,"pc3","y",ord=2)
+    pc3.long.stats <- polyfit(popDF,"pc3","x",ord=2)
+    names(pc3.lat.stats) <- paste0("pc3lat.",c("int","frst","scnd"))
+    names(pc3.long.stats) <- paste0("pc3long.",c("int","frst","scnd"))
+
+    
+    fsts = data.frame(fst=pairFst.loc)
+    fsts = cbind(fsts,data.frame(t(sapply(strsplit(names(pairFst.loc),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
+    fsts = fsts[order(fsts$to,fsts$from),]
+
+    neis = data.frame(nei=pairnei)
+    neis = cbind(neis,data.frame(t(sapply(strsplit(names(pairnei),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
+    neis = neis[order(neis$to,neis$from),]
+
+
+
+    
+    edist = data.frame(edist=paireuc)
+    edist = cbind(edist,data.frame(t(sapply(strsplit(names(paireuc),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
+    edist = edist[order(edist$to,edist$from),]
+    
+    dsts <- merge(merge(merge(dsts,fsts),edist),neis)
+    
+    print("this far3")
         
-        na.lat.fit <- lm(na~y,popDF)
-        na.lat.slope=c(coef(na.lat.fit)[2])
-        na.lat.int=c(coef(na.lat.fit)[1])
+    IBDfst <- lm(log(fst+1)~log(d),dsts)
+    ibdfst.slope <- c(coef(IBDfst)[2])
+    ibdfst.int <- c(coef(IBDfst)[1])
+    bsfst <- segmentGLM(c(dsts$d),log(c(dsts$fst+1)))
 
-        he.lat.fit <- lm(he~y,popDF)
-        he.lat.slope=c(coef(he.lat.fit)[2])
-        he.lat.int=c(coef(he.lat.fit)[1])
+    IBDnei <- lm(log(nei+1)~log(d),dsts)
+    ibdnei.slope <- c(coef(IBDnei)[2])
+    ibdnei.int <- c(coef(IBDnei)[1])
+    bsnei <- segmentGLM(c(dsts$d),log(c(dsts$nei+1)))
 
-        fsts = data.frame(fst=pairFst)
-        fsts = cbind(fsts,data.frame(t(sapply(strsplit(names(pairFst),"\\."),function(nms){c(from=nms[1],to=nms[2])})),stringsAsFactors=F))
-        fsts = fsts[order(fsts$to,fsts$from),]
+       
+    IBDedist <- lm(log(edist+1)~log(d),dsts)
+    ibdedist.slope <- c(coef(IBDedist)[2])
+    ibdedist.int <- c(coef(IBDedist)[1])
+    bsedist <- segmentGLM(c(dsts$d),log(c(dsts$edist+1)))
 
-        dsts <- merge(dsts,fsts)
-
-print("this far3")
-        
-        IBD <- lm(log(fst)~log(d),dsts)
-        ibd.slope <- c(coef(IBD)[2])
-        ibd.int <- c(coef(IBD)[1])
-        bs <- segmentGLM(c(dsts$d),log(c(dsts$fst)))
-
-	stats = c(SNPs, localSNP, localHo, total_Ho, privateSNP, total_priv, pairFst, tot_Fst,
-                  ibd.slope=ibd.slope,ibd.int=ibd.int,bs.break=bs[1],bs.ll=bs[2],
-                  na.lat.slope=na.lat.slope,
-                  na.lat.int=na.lat.int, he.lat.slope=he.lat.slope, he.lat.int=he.lat.int)
-        
-	stats1 = matrix(data=stats, nrow = 1)
-	colnames(stats1) = names(stats)
-	stats = as.data.frame(stats1)
-	stats
+    
+    stats = c(SNPs, localSNP, privateSNP, total_priv, pairFst.loc, pairnei,tot_Fst,
+              ibdfst.slope=ibdfst.slope,ibdfst.int=ibdfst.int,bsfst.break=bsfst[1],bsfst.ll=bsfst[2],
+              ibdedist.slope=ibdedist.slope,ibdedist.int=ibdedist.int,bsedist.break=bsedist[1],bsedist.ll=bsedist[2],
+              ibdnei.slope=ibdnei.slope,ibdnei.int=ibdnei.int,bsnei.break=bsnei[1],bsnei.ll=bsnei[2],
+              
+              he.lat.stats, he.long.stats,
+              pc1.lat.stats, pc1.long.stats,
+              pc2.lat.stats, pc2.long.stats,
+              pc3.lat.stats, pc3.long.stats)
+    
+    stats1 = matrix(data=stats, nrow = 1)
+    colnames(stats1) = names(stats)
+    stats = as.data.frame(stats1)
+    stats
 }
 
-
-
-get.nSNP = function(out) {
-
-	polysites = which(summarizeLoci(out)[,3] == 2)
-	nSNPloci = length(polysites)
-	nSNPloci
-}
+holoStats <- cmpfun(holoStats.r)  #requires compiler
 
 
 #This gets off when <347 variable loci in the file...

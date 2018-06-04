@@ -3,7 +3,6 @@
 
 runFSC = function(pops = NULL, rland = NULL, parms=NULL, sample_pops = NULL, sample_n = NULL, label = "test", marker = "snp", nloci = 500, delete.files = TRUE, num.cores = 1, exec="fsc25", growth.model = "step") {
 	
-
 	#ID the empty pops
 	empty_pops = pops$pop[is.na(pops$arrive) == TRUE]
 

@@ -1,4 +1,4 @@
-getpophist <- function(l,maxtime=500, window = c(0,100))
+getpophist <- function(l,maxtime=500, window = c(0,100),force=T)
 {
   if (FALSE)
   {
@@ -30,7 +30,7 @@ getpophist <- function(l,maxtime=500, window = c(0,100))
     {
 #        print(cnt)
         potmoth <- data.frame(unique(cbind(pop=landscape.populations(l),matid=l$individuals[,4])))
-        l <- landscape.simulate(l,1)
+        l <- landscape.simulate(l,1,force=force)
 
         if(window[1] == cnt) {
           occpops = unique(landscape.populations(l))
